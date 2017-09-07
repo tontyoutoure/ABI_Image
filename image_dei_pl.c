@@ -2,22 +2,21 @@
 
 const char *argp_program_bug_address = "tontyoutoure@gmail.com";
 const char *argp_program_version = "version 2.0";
-static int poisson_noise(double *p, long size, long mean);
+/*static int poisson_noise(double *p, long size, long mean);*/
 static inline int compare(const void *a, const void *b);
 void *makeimage_1(void *ARG);
 
 int main(int argc, char *argv[]){
-	FILE *fout = NULL, *flog = NULL;
+	FILE *fout = NULL;
 	pthread_t tid[NoT];
 	pthread_mutex_t mutexi = PTHREAD_MUTEX_INITIALIZER;
 	pthread_mutex_t mutexo = PTHREAD_MUTEX_INITIALIZER;
 	char input_fn[FILENAME_MAX], output_fn_mid[FILENAME_MAX];
 	uint32_t i, j, k, m, n, number_of_positions = 0, LRC, X, Y;
-	double fwhm, *image, *image_out, *pho, *RC[2] = {NULL, NULL}, *pos = NULL, *pos_out, *inte, *cache_, sum3, *photon_number;
+	double fwhm, *image, *image_out, *pho, *RC[2] = {NULL, NULL}, *pos = NULL, *pos_out, *inte = NULL, sum3, *photon_number = NULL;
 	time_t timer;
 	size_t dims[3], number_of_photons;
-	uint8_t *imout;
-	uint16_t *imout2, file_number = 0;
+	uint16_t file_number = 0;
 	struct argp_option options[] = {
 		{"size", 's', "XSize_YSize", 0, "Specialize specimen size, default value is 0.01m"},
 		{"distance", 'd', "Distance", 0, "Specialize distance from specimen to detector, default value is 0"},
@@ -32,14 +31,14 @@ int main(int argc, char *argv[]){
 		{"multiplier", 'm', "Multiplier", 0, "How much photons a file include for a single pixel"},
 		{"interval", 'i', "Numbers", 0, "Output for every what numbers of files"},
 		{"verbose level", 'v', "Level", 0, "Set the verbose level, default value is 0(silenced)"},
+		{"sigma", 'g', "SigmaX_SigmaY", 0, "Sigma of point dispersion function on detector, default value is 0_0"},
 		{0}
 	};
 	makeimage_t ARG;
 	struct argp argp = {options, ParseOpt, "[PhotonFileNames]", "A program transform photons into images.\v"};
-	struct argp_input input = {0.01, 0.01, 0, 0.0000099999999, 0, FLAG_SPEC_CRY|FLAG_SPEC_ATT, 0, NULL, {0}, {0}, {0}, {0}, {0}, 1, 0, 0};
+	struct argp_input input = {0.01, 0.01, 0, 0.0000099999999, 0, FLAG_SPEC_CRY|FLAG_SPEC_ATT, 0, NULL, {0}, {0}, {0}, {0}, 1, 0, 0, 0, 0};
 	mat_t *mat;
 	matvar_t *matvar_output, *matvar_pos = 0, *matvar_RC = 0;
-	//matvar_t matvar_para;
 	argp_parse(&argp, argc, argv, 0, 0, &input);
 
 	fout = fopen(input.output_fn, "w");
@@ -113,6 +112,9 @@ int main(int argc, char *argv[]){
 		ARG.LRC = LRC;
 		ARG.fwhm = fwhm;
 	}
+	ARG.fSigmaX = input.fSigmaX;
+	ARG.fSigmaY = input.fSigmaY;
+	ARG.pixel_size = input.pixel_size;
 
 	if (input.input_n == 0) {
 		fprintf(stderr, "No input files\n");
@@ -172,10 +174,12 @@ int main(int argc, char *argv[]){
 			ARG.posa = 1;
 		else
 			ARG.posa = 0;
+
 		for (i = 0; i < NoT; i++)
 			pthread_create(tid+i, NULL, makeimage_1, &ARG);
 		for (i = 0; i < NoT; i++) 
 			pthread_join(tid[i], NULL); 
+
 		free(pho);
 		if(input.interval && !(file_number%input.interval)) {
 			sprintf(output_fn_mid, "%d_%s", file_number*input.ppppf, input.output_fn);
@@ -241,6 +245,7 @@ int main(int argc, char *argv[]){
 		}
 	}
 	while(input.input_pt);
+
 			//begin output
 		
 	mat = Mat_CreateVer(input.output_fn, NULL, MAT_FT_MAT5);
@@ -309,7 +314,7 @@ int main(int argc, char *argv[]){
 	return 0;
 }
 
-
+/*
 static int poisson_noise(double *p, long size, long mean) {
 	gsl_rng * gsl_rp = gsl_rng_alloc(gsl_rng_mt19937);
 	long i;
@@ -326,7 +331,7 @@ static int poisson_noise(double *p, long size, long mean) {
 	gsl_rng_free(gsl_rp);
 	return 0;
 
-}
+}*/
 static inline int compare(const void *a, const void *b){
 	return (*(double *)a-*(double *)b>0)-(*(double *)a-*(double *)b<0);
 }
@@ -342,7 +347,7 @@ static inline int compare(const void *a, const void *b){
 */
 void *makeimage_1(void *ARG) {
 	double thetay, index, intensity, dis;
-	long x, y, i;
+	uint64_t x, y, i;
 	uint32_t n;
 	uint16_t posi;
 	double *IM, *nocry, *count;
@@ -369,6 +374,9 @@ void *makeimage_1(void *ARG) {
 	double fwhm = ((makeimage_t *)ARG) -> fwhm;
 	dis = ((makeimage_t *)ARG) -> dis;
 	double *photon_number = ((makeimage_t *)ARG) -> photon_number;
+	double pixel_size = ((makeimage_t *)ARG) -> pixel_size;
+	double fSigmaX = ((makeimage_t *)ARG) -> fSigmaX;
+	double fSigmaY = ((makeimage_t *)ARG) -> fSigmaY;
 	if(cry) {
 		itp = gsl_interp_alloc(gsl_interp_linear, LRC);
 		gsl_interp_init(itp, RC[0], RC[1], LRC);
@@ -408,12 +416,11 @@ void *makeimage_1(void *ARG) {
 
 			if (index > RC[0][0] && index < RC[0][LRC-1]) {
 				intensity = gsl_interp_eval(itp, RC[0], RC[1], index, acc) * (att*pho[n*5+4]+!att);
-
-				IM[posi*X*Y+y*X+x] += intensity/photon_number[posi];
+				GaussianPDF(IM+posi*X*Y, y*X+x, X, Y, fSigmaX, fSigmaY, pixel_size, intensity/photon_number[posi]);
 			}
 		}
 		count[y*X+x] += 1;
-		nocry[y*X+x] += pho[n*5+4];
+		GaussianPDF(nocry, y*X+x, X, Y, fSigmaX, fSigmaY, pixel_size, pho[n*5+4]);
 	}
 
 	pthread_mutex_lock(mutexpo);

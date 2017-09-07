@@ -44,6 +44,26 @@ int ParseOpt(int32_t key, char *arg, struct argp_state *state) {
 				exit(-1);
 			}
 			break;
+		case 'g':
+			cp = strchr(arg, '_')+1;
+			n = ifstrnum(cp);
+			if (n >= 0)
+				input->fSigmaX = eatof(cp);
+			else {
+				fprintf(stderr, "Sigma input error\n");
+				exit(-1);
+			}
+			strcpy(buf, arg);
+			cp = strchr(buf, '_');
+			*cp = '\0';
+			n = ifstrnum(buf);
+			if (n >= 0)
+				input->fSigmaY = eatof(buf);
+			else {
+				fprintf(stderr, "Sigma input error\n");
+				exit(-1);
+			}
+			break;
 
 		case 'd':	
 			if (ifstrnum(arg) >= 0 )
@@ -201,3 +221,24 @@ uint16_t getpos(uint32_t n, double *photon_number, uint32_t number_of_positions)
 	}
 	return i;
 }		/* -----  end of function getpos  ----- */
+
+/* 
+ * ===  FUNCTION  ======================================================================
+ *         Name:  GaussianPDF
+ *  Description:  disperse photon on detector. We assume outside 6 sigma, the dispersion could be emitted
+ * =====================================================================================
+ */
+uint16_t GaussianPDF(double *image, uint64_t index, uint32_t iX, uint32_t iY, double fSigmaX, double fSigmaY, double fPixelSize, double fIntensity) {
+	uint32_t iHalfWindowX, iHalfWindowY;
+	int64_t i, j;
+	iHalfWindowX = ceil(fSigmaX/fPixelSize*6), iHalfWindowY = ceil(fSigmaY/fPixelSize*6);
+	for (j = (int64_t)floor(index/iX)-iHalfWindowY; j <= (int64_t)floor(index/iX)+iHalfWindowY; j++) {
+		for (i = (int64_t)(index%iX)-iHalfWindowX; i <= (int64_t)(index%iY)+iHalfWindowX; i++) {
+			if (i >= 0 && i < iX && j >=0 && j <iY) {
+				image[j*iX+i] = image[j*iX+i]+ fIntensity*exp(-pow(((double)i-index%iX)*fPixelSize, 2)/2/pow(fSigmaX, 2))*exp(-pow(((double)j-floor((double)index/iX))*fPixelSize, 2)/2/pow(fSigmaY, 2));
+			}
+		}
+	}
+	
+	return EXIT_SUCCESS;
+}		/* -----  end of function GaussianPDF  ----- */

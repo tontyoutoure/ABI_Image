@@ -37,7 +37,7 @@
 #include <matio.h>
 
 
-#define NoT 1 // number of threads
+#define NoT 7 // number of threads
 #define SQRT2PI 2.50662827463
 #define FORMAT_PNG 1
 #define FORMAT_TIF 2
@@ -60,8 +60,11 @@ typedef struct {
 	pthread_mutex_t *mutexpo;/*Mutex lock for output*/
 	double a;/*size of the detector, x direction*/
 	double b;/*size of the detector, y direction*/
-	uint16_t X;/*size of the detector, x direction*/
-	uint16_t Y;/*size of the detector, y direction*/
+	uint32_t X;/*size of the detector, x direction*/
+	uint32_t Y;/*size of the detector, y direction*/
+	double pixel_size; /*size of the detector pixel*/
+	double fSigmaX;
+	double fSigmaY;
 	int8_t att;
 	int8_t cry;
 	int8_t posa;
@@ -94,6 +97,8 @@ struct argp_input{
 	uint32_t ppppf; /*How many photons a file include*/
 	uint32_t interval; /*Output interval*/
 	uint32_t verbose_level;
+	double fSigmaX;
+	double fSigmaY;
 };
 
 typedef struct {
@@ -102,4 +107,3 @@ typedef struct {
 }filename_element;
 
 #include "prototype.h"
-
